@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from app.analysis.profiler import DatasetProfile, profile_dataset
 from app.config import Settings, get_settings
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -13,11 +14,13 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 DATASETS: dict[str, pd.DataFrame] = {}
 
 
-class DatasetCreated(BaseModel):
+class DatasetResponse(BaseModel):
     dataset_id: str
+    profile: DatasetProfile
+
+
+class DatasetCreated(DatasetResponse):
     filename: str
-    rows: int
-    columns: list[str]
 
 
 def load_csv(raw: bytes, settings: Settings) -> pd.DataFrame:
@@ -69,6 +72,12 @@ def upload_dataset(file: UploadFile, settings: Annotated[Settings, Depends(get_s
     df = load_csv(raw, settings)
     dataset_id = uuid.uuid4().hex
     DATASETS[dataset_id] = df
-    return DatasetCreated(
-        dataset_id=dataset_id, filename=filename, rows=len(df), columns=[str(c) for c in df.columns]
-    )
+    return DatasetCreated(dataset_id=dataset_id, filename=filename, profile=profile_dataset(df))
+
+
+@router.get("/{dataset_id}")
+def get_dataset(dataset_id: str) -> DatasetResponse:
+    df = DATASETS.get(dataset_id)
+    if df is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dataset not found.")
+    return DatasetResponse(dataset_id=dataset_id, profile=profile_dataset(df))

@@ -27,8 +27,8 @@ def test_valid_csv_returns_dataset_id():
     response = upload("category,sales\nFurniture,10.5\nOffice,3\n")
     assert response.status_code == 201
     body = response.json()
-    assert body["rows"] == 2
-    assert body["columns"] == ["category", "sales"]
+    assert body["profile"]["rows"] == 2
+    assert [c["name"] for c in body["profile"]["column_profiles"]] == ["category", "sales"]
     assert body["filename"] == "data.csv"
     assert DATASETS[body["dataset_id"]]["sales"].sum() == 13.5
 
@@ -36,7 +36,7 @@ def test_valid_csv_returns_dataset_id():
 def test_utf8_bom_is_stripped_from_header():
     response = upload("﻿city,count\nPune,1\n".encode("utf-8"))
     assert response.status_code == 201
-    assert response.json()["columns"] == ["city", "count"]
+    assert [c["name"] for c in response.json()["profile"]["column_profiles"]] == ["city", "count"]
 
 
 def test_each_upload_gets_a_new_id():
