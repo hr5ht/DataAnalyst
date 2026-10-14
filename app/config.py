@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     groq_api_key: SecretStr | None = None
 
+    max_upload_mb: float = 10
+    max_rows: int = 200_000
+    max_columns: int = 100
+
 
 @lru_cache
 def get_settings() -> Settings:
