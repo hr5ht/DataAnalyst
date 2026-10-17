@@ -36,6 +36,8 @@ class DatasetProfile(BaseModel):
 
 
 def _finite(value: Any) -> float | None:
+    if pd.isna(value):
+        return None
     value = float(value)
     return value if math.isfinite(value) else None
 

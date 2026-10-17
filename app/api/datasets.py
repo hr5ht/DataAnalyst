@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from app.analysis.profiler import DatasetProfile, profile_dataset
+from app.analysis.tools import normalize_dtypes
 from app.config import Settings, get_settings
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -53,7 +54,7 @@ def load_csv(raw: bytes, settings: Settings) -> pd.DataFrame:
         )
     if len(df) > settings.max_rows:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, f"The CSV has more than {settings.max_rows} rows.")
-    return df
+    return normalize_dtypes(df)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
