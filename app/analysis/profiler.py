@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel
 
+from app.analysis.tools import column_kind
+
 SAMPLE_ROWS = 5
 MAX_TEXT_LENGTH = 100
 NUMERIC_STATS = ("mean", "std", "min", "median", "max")
@@ -21,6 +23,7 @@ class NumericSummary(BaseModel):
 
 class ColumnProfile(BaseModel):
     name: str
+    kind: str
     dtype: str
     missing: int
     unique: int
@@ -66,6 +69,7 @@ def profile_dataset(df: pd.DataFrame) -> DatasetProfile:
         column_profiles=[
             ColumnProfile(
                 name=str(name),
+                kind=column_kind(series),
                 dtype=str(series.dtype),
                 missing=int(series.isna().sum()),
                 unique=int(series.nunique()),

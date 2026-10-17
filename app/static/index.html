@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Analyst</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Data Analyst</h1>
+    <p>Upload a CSV file to see its columns, missing values and a few sample rows.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <form id="upload-form">
+        <label for="file">CSV file</label>
+        <div class="upload-row">
+          <input id="file" name="file" type="file" accept=".csv,text/csv" required>
+          <button type="submit">Upload</button>
+        </div>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <div id="profile" hidden>
+      <section class="stats" id="stats" aria-label="Dataset summary"></section>
+
+      <section class="card">
+        <h2>Columns</h2>
+        <div class="table-wrap">
+          <table id="columns"></table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Sample rows</h2>
+        <div class="table-wrap">
+          <table id="sample"></table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
