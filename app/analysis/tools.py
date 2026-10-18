@@ -4,7 +4,7 @@ import math
 import operator
 import re
 from datetime import date
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -44,12 +44,15 @@ class Condition(BaseModel):
     value: str | int | float | bool | list[str | int | float] | None = None
 
 
+Filters = Annotated[list[Condition], Field(default_factory=list, max_length=5)]
+
+
 class AggregateArgs(BaseModel):
     operation: Operation
     column: str | None = None
     group_by: list[str] = Field(default_factory=list, max_length=3)
     sort: SortOrder | None = "desc"
-    filters: list[Condition] = Field(default_factory=list, max_length=5)
+    filters: Filters
 
 
 class TopNArgs(BaseModel):
@@ -58,7 +61,7 @@ class TopNArgs(BaseModel):
     column: str | None = None
     n: int = Field(10, ge=1, le=100)
     sort: SortOrder = "desc"
-    filters: list[Condition] = Field(default_factory=list, max_length=5)
+    filters: Filters
 
 
 class FilterArgs(BaseModel):
@@ -70,7 +73,7 @@ class FilterArgs(BaseModel):
 class CorrelationArgs(BaseModel):
     columns: list[str] = Field(min_length=2, max_length=10)
     method: Literal["pearson", "spearman"] = "pearson"
-    filters: list[Condition] = Field(default_factory=list, max_length=5)
+    filters: Filters
 
 
 class TrendArgs(BaseModel):
@@ -80,7 +83,7 @@ class TrendArgs(BaseModel):
     column: str | None = None
     start: date | None = None
     end: date | None = None
-    filters: list[Condition] = Field(default_factory=list, max_length=5)
+    filters: Filters
 
 
 def column_kind(series: pd.Series) -> str:
@@ -131,6 +134,7 @@ def get_top_n(df: pd.DataFrame, args: TopNArgs) -> TableResult:
 
 def filter_data(df: pd.DataFrame, args: FilterArgs) -> TableResult:
     _require_columns(df, args.columns)
+    _require_distinct(args.columns, "columns")
     matched = apply_filters(df, args.conditions)
     warnings = []
     if matched.empty:
@@ -142,8 +146,7 @@ def filter_data(df: pd.DataFrame, args: FilterArgs) -> TableResult:
 
 
 def compute_correlation(df: pd.DataFrame, args: CorrelationArgs) -> TableResult:
-    if len(set(args.columns)) != len(args.columns):
-        raise AnalysisError("The same column appears more than once in columns.")
+    _require_distinct(args.columns, "columns")
     for column in args.columns:
         _require_numeric(df, column)
     data = apply_filters(df, args.filters)
@@ -209,8 +212,7 @@ def apply_filters(df: pd.DataFrame, conditions: list[Condition]) -> pd.DataFrame
 
 def _aggregate(df: pd.DataFrame, args: AggregateArgs) -> tuple[pd.DataFrame, list[str]]:
     _require_columns(df, args.group_by)
-    if len(set(args.group_by)) != len(args.group_by):
-        raise AnalysisError("The same column appears more than once in group_by.")
+    _require_distinct(args.group_by, "group_by")
     _require_metric(df, args.operation, args.column)
 
     filtered = apply_filters(df, args.filters)
@@ -354,6 +356,11 @@ def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
     unknown = [c for c in columns if c not in df.columns]
     if unknown:
         raise AnalysisError(f"Unknown column: {', '.join(unknown)}.")
+
+
+def _require_distinct(columns: list[str], field: str) -> None:
+    if len(set(columns)) != len(columns):
+        raise AnalysisError(f"The same column appears more than once in {field}.")
 
 
 def _require_numeric(df: pd.DataFrame, column: str) -> None:

@@ -25,14 +25,12 @@ class DatasetCreated(DatasetResponse):
 
 
 def load_csv(raw: bytes, settings: Settings) -> pd.DataFrame:
-    if b"\x00" in raw:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The file must be a UTF-8 encoded text CSV.")
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The file must be a UTF-8 encoded text CSV.") from None
-    if not text.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The file is empty.")
+        text = None
+    if text is None or "\x00" in text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The file must be a UTF-8 encoded text CSV.")
 
     try:
         df = pd.read_csv(io.StringIO(text), nrows=settings.max_rows + 1, low_memory=False)

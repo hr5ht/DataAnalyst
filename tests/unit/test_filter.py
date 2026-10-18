@@ -98,3 +98,9 @@ def test_filters_apply_before_aggregation(orders):
         "Excluded 1 row with a missing country value.",
         "Ignored 1 row with a missing amount value.",
     ]
+
+
+def test_selected_columns_must_be_distinct(orders):
+    args = FilterArgs(conditions=[Condition(column="qty", operator="gt", value=1)], columns=["qty", "qty"])
+    with pytest.raises(AnalysisError, match="more than once in columns"):
+        filter_data(orders, args)
