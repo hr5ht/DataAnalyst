@@ -84,3 +84,78 @@ def test_unknown_columns_are_rejected_before_dispatch():
     intent = parse({"tool": "aggregate_data", "operation": "sum", "column": "Sales", "group_by": ["Region"]})
     with pytest.raises(IntentError, match="not in the dataset: Sales, Region"):
         check_columns(intent, ["Revenue", "Country"])
+
+
+@pytest.mark.parametrize("text", ["", "not json", "{'tool': 'list_columns'}", '{"tool": "list_columns"'])
+def test_output_that_is_not_json_is_rejected(text):
+    with pytest.raises(IntentError, match="valid JSON"):
+        parse_intent(text)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [],
+        "list_columns",
+        {},
+        {"tool": "run_python", "code": "import os; os.remove('data.csv')"},
+        {"tool": "eval", "expression": "df.sum()"},
+        {"tool": "LIST_COLUMNS"},
+    ],
+)
+def test_unknown_or_missing_tools_are_rejected(data):
+    with pytest.raises(IntentError, match="invalid plan"):
+        parse(data)
+
+
+@pytest.mark.parametrize(
+    ("data", "field"),
+    [
+        ({"tool": "aggregate_data", "operation": "variance", "column": "Revenue"}, "operation"),
+        ({"tool": "aggregate_data", "operation": "sum", "column": "Revenue", "groupby": ["Country"]}, "groupby"),
+        ({"tool": "aggregate_data", "operation": "sum", "group_by": ["a", "b", "c", "d"]}, "group_by"),
+        ({"tool": "aggregate_data", "operation": "sum", "sort": "random"}, "sort"),
+        ({"tool": "get_top_n", "group_by": "Country", "n": 1000}, "n"),
+        ({"tool": "get_top_n", "group_by": "Country", "sort": None}, "sort"),
+        ({"tool": "filter_data", "conditions": []}, "conditions"),
+        ({"tool": "filter_data", "conditions": [{"column": "a", "operator": "like", "value": "x"}]}, "operator"),
+        ({"tool": "filter_data", "conditions": [{"column": "a", "operator": "eq", "value": 1, "note": "x"}]}, "note"),
+        ({"tool": "compute_correlation", "columns": ["Quantity"]}, "columns"),
+        ({"tool": "compute_correlation", "columns": ["a", "b"], "method": "kendall"}, "method"),
+        ({"tool": "analyze_time_trend", "date_column": "d", "interval": "hourly"}, "interval"),
+        ({"tool": "analyze_time_trend", "date_column": "d", "start": "next week"}, "start"),
+        ({"tool": "clarify", "question": ""}, "question"),
+        ({"tool": "unsupported", "reason": "x" * 301}, "reason"),
+        ({"tool": "list_columns", "columns": ["a"]}, "columns"),
+    ],
+)
+def test_invalid_arguments_are_rejected_with_the_field_name(data, field):
+    with pytest.raises(IntentError, match="invalid plan") as raised:
+        parse(data)
+    assert field in str(raised.value)
+
+
+def test_validation_message_stays_short():
+    data = {"tool": "aggregate_data", "operation": "x", "column": 1, "group_by": "y", "sort": "z", "filters": "w"}
+    with pytest.raises(IntentError) as raised:
+        parse(data)
+    assert str(raised.value).count(";") <= 2
+
+
+def test_unsupported_and_clarify_reference_no_columns():
+    assert referenced_columns(parse({"tool": "unsupported", "reason": "Forecasts are not available."})) == []
+    assert referenced_columns(parse({"tool": "clarify", "question": "Which metric?"})) == []
+
+
+def test_arguments_nested_under_an_arguments_key_are_accepted():
+    intent = parse({"tool": "compute_correlation", "arguments": {"columns": ["Quantity", "UnitPrice"]}})
+    assert type(intent) is CorrelationIntent
+    assert intent.columns == ["Quantity", "UnitPrice"]
+    assert type(parse({"tool": "profile_dataset", "arguments": {}})) is ProfileIntent
+
+
+def test_nested_arguments_are_still_validated():
+    with pytest.raises(IntentError, match="code: Extra inputs"):
+        parse({"tool": "list_columns", "arguments": {"code": "rm -rf /"}})
+    with pytest.raises(IntentError, match="invalid plan"):
+        parse({"tool": "get_top_n", "arguments": {"group_by": "Country"}, "n": 5})

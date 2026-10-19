@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Operation = Literal["sum", "mean", "median", "count", "min", "max"]
 SortOrder = Literal["asc", "desc"]
@@ -39,6 +39,8 @@ class TableResult(BaseModel):
 
 
 class Condition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     column: str
     operator: FilterOperator
     value: str | int | float | bool | list[str | int | float] | None = None

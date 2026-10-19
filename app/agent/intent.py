@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -78,7 +78,7 @@ def parse_intent(text: str) -> Intent:
     except json.JSONDecodeError:
         raise IntentError("The model did not return valid JSON.") from None
     try:
-        return IntentEnvelope.model_validate({"intent": data}).intent
+        return IntentEnvelope.model_validate({"intent": _unwrap_arguments(data)}).intent
     except ValidationError as error:
         raise IntentError(f"The model returned an invalid plan: {_describe(error)}") from None
 
@@ -99,6 +99,12 @@ def check_columns(intent: Intent, available: list[str]) -> None:
     unknown = [c for c in referenced_columns(intent) if c not in available]
     if unknown:
         raise IntentError(f"The plan uses columns that are not in the dataset: {', '.join(unknown)}.")
+
+
+def _unwrap_arguments(data: Any) -> Any:
+    if isinstance(data, dict) and set(data) == {"tool", "arguments"} and isinstance(data["arguments"], dict):
+        return {**data["arguments"], "tool": data["tool"]}
+    return data
 
 
 def _strip_fences(text: str) -> str:

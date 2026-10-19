@@ -29,6 +29,7 @@ VALUE must match the column type: a number for numeric columns, a string for tex
 a "YYYY-MM-DD" string for datetime. "in" takes a list. "is_null" and "not_null" take no value.
 
 Rules:
+- Put the arguments next to "tool" at the top level of the object, exactly as in the tool list.
 - Use column names exactly as listed. Never invent columns.
 - sum, mean, median, min and max need a numeric column. Time trends need a datetime column.
 - Only gt, gte, lt and lte work on numeric and datetime columns.
