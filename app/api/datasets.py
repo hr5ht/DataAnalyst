@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 DATASETS: dict[str, pd.DataFrame] = {}
+MAX_COLUMN_NAME_LENGTH = 100
 
 
 class DatasetResponse(BaseModel):
@@ -49,6 +50,10 @@ def load_csv(raw: bytes, settings: Settings) -> pd.DataFrame:
     if len(df.columns) > settings.max_columns:
         raise HTTPException(
             status.HTTP_413_CONTENT_TOO_LARGE, f"The CSV has more than {settings.max_columns} columns."
+        )
+    if any(len(str(name)) > MAX_COLUMN_NAME_LENGTH for name in df.columns):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Column names must be {MAX_COLUMN_NAME_LENGTH} characters or fewer."
         )
     if len(df) > settings.max_rows:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, f"The CSV has more than {settings.max_rows} rows.")

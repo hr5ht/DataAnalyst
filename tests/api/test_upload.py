@@ -100,3 +100,9 @@ def test_short_rows_become_missing_values():
     response = upload("a,b\n1,2\n3\n")
     assert response.status_code == 201
     assert DATASETS[response.json()["dataset_id"]]["b"].isna().sum() == 1
+
+
+def test_rejects_very_long_column_names():
+    response = upload(f"{'x' * 101},b\n1,2\n")
+    assert response.status_code == 400
+    assert "100 characters" in response.json()["detail"]
