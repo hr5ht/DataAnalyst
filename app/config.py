@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     embedding_model: str = "minishlab/potion-base-8M"
 
-    max_upload_mb: float = 10
+    max_upload_mb: float = Field(4, gt=0)
     max_rows: int = 200_000
     max_columns: int = 100
 

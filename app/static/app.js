@@ -35,6 +35,7 @@ function setStatus(message, isError = false) {
 function errorMessage(data, status) {
   if (typeof data.detail === "string") return data.detail;
   if (Array.isArray(data.detail)) return data.detail.map((item) => item.msg).join(" ");
+  if (status === 413) return "The file is too large to upload.";
   return `Upload failed (HTTP ${status}).`;
 }
 
