@@ -12,13 +12,17 @@ from app.llm import invoke_llm
 MAX_QUESTION_LENGTH = 500
 
 
-def plan_question(model: BaseChatModel, question: str, df: pd.DataFrame) -> Intent:
+def clean_question(question: str) -> str:
     question = question.strip()
     if not question:
         raise IntentError("Ask a question about the dataset.")
     if len(question) > MAX_QUESTION_LENGTH:
         raise IntentError(f"Keep the question under {MAX_QUESTION_LENGTH} characters.")
+    return question
 
+
+def plan_question(model: BaseChatModel, question: str, df: pd.DataFrame) -> Intent:
+    question = clean_question(question)
     columns = list_columns(df).rows
     reply = invoke_llm(model.bind(response_format={"type": "json_object"}), build_messages(question, columns))
     intent = parse_intent(reply.content if isinstance(reply.content, str) else "")
