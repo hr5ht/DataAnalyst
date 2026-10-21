@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     max_upload_mb: float = Field(4, gt=0)
     max_rows: int = 200_000
     max_columns: int = 100
+    max_datasets: int = Field(10, ge=1)
+    dataset_ttl_minutes: float = Field(60, gt=0)
 
     @field_validator("groq_api_key", "gemini_api_key", mode="before")
     @classmethod

@@ -4,45 +4,120 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Data Analyst</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232563eb'/%3E%3Cpath d='M7 17V11M12 17V7M17 17v-4' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@4.1.2/plotly-basic.min.js" integrity="sha384-CQVnjjRLr7qiE0NRUOMECQiOsJiFOrqPu+WrTttl7hUk5w+7FaiJA+y3SVfjpksc" crossorigin="anonymous" defer></script>
 </head>
 <body>
-  <header>
-    <h1>Data Analyst</h1>
-    <p>Upload a CSV file to see its columns, missing values and a few sample rows.</p>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6"/><path d="M7 17V11M12 17V7M17 17v-4"/></svg>
+      <span>Data Analyst</span>
+    </div>
+    <div class="dataset-chip" id="dataset-chip" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+      <span id="dataset-name"></span>
+      <span class="muted" id="dataset-size"></span>
+      <button type="button" class="ghost" id="new-file">New file</button>
+    </div>
   </header>
 
   <main>
-    <section class="card">
-      <form id="upload-form">
-        <label for="file">CSV file</label>
-        <div class="upload-row">
-          <input id="file" name="file" type="file" accept=".csv,text/csv" required>
-          <button type="submit">Upload</button>
-        </div>
-      </form>
-      <p id="status" role="status" aria-live="polite"></p>
+    <section class="upload-view" id="upload-view">
+      <h1>Ask questions about any CSV file</h1>
+      <p class="lead">Upload a file to check its columns and data quality, then chat with the AI analyst. Every number is computed with pandas; the AI only picks the analysis and explains the result.</p>
+
+      <label class="dropzone" id="dropzone" for="file">
+        <input id="file" type="file" accept=".csv,text/csv" class="visually-hidden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <strong>Drop a CSV file here or click to browse</strong>
+        <span class="muted" id="limits">Comma-separated, UTF-8, with a header row</span>
+      </label>
+      <p class="status" id="upload-status" role="status" aria-live="polite"></p>
+      <button type="button" class="link" id="sample-button">No file handy? Try a small sample of sales data</button>
+
+      <ol class="how">
+        <li><strong>Upload</strong><span>The file is checked and profiled: types, missing values, duplicates.</span></li>
+        <li><strong>Review</strong><span>See every column, its range and a few sample rows.</span></li>
+        <li><strong>Ask</strong><span>Get answers with the table, chart and exact steps used.</span></li>
+      </ol>
     </section>
 
-    <div id="profile" hidden>
-      <section class="stats" id="stats" aria-label="Dataset summary"></section>
+    <section class="workspace" id="workspace" hidden>
+      <div class="overview">
+        <section class="stats" id="stats" aria-label="Dataset summary"></section>
 
-      <section class="card">
-        <h2>Columns</h2>
-        <div class="table-wrap">
-          <table id="columns"></table>
-        </div>
-      </section>
+        <section class="card quality-card">
+          <h2>Data quality</h2>
+          <ul class="quality" id="quality"></ul>
+        </section>
 
-      <section class="card">
-        <h2>Sample rows</h2>
-        <div class="table-wrap">
-          <table id="sample"></table>
+        <section class="card columns-card">
+          <div class="card-head">
+            <h2>Columns</h2>
+            <span class="muted" id="type-summary"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="columns"></table>
+          </div>
+        </section>
+
+        <section class="card sample-card">
+          <div class="card-head">
+            <h2>Sample rows</h2>
+            <span class="muted" id="sample-note"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="sample"></table>
+          </div>
+        </section>
+      </div>
+
+      <aside class="chat" aria-label="Chat with the AI analyst">
+        <div class="chat-head">
+          <h2>AI analyst</h2>
+          <p class="muted">Ask about this file. Answers include the table, chart and steps used.</p>
         </div>
-      </section>
-    </div>
+        <div class="messages" id="messages" aria-live="polite"></div>
+        <form class="composer" id="chat-form">
+          <label for="question" class="visually-hidden">Your question</label>
+          <textarea id="question" rows="1" maxlength="500" placeholder="Ask a question about your data..." required></textarea>
+          <button type="submit" id="send" aria-label="Send question">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+        <p class="composer-hint muted"><span id="char-count">0/500</span> · Enter to send, Shift+Enter for a new line</p>
+      </aside>
+    </section>
   </main>
+
+  <template id="assistant-template">
+    <div class="message assistant">
+      <span class="badge" hidden></span>
+      <p class="answer-text"></p>
+      <div class="chart" hidden></div>
+      <div class="result" hidden>
+        <div class="table-wrap result-table">
+          <table></table>
+        </div>
+        <div class="result-foot">
+          <span class="muted row-count"></span>
+          <button type="button" class="link download">Download table as CSV</button>
+        </div>
+      </div>
+      <ul class="warnings" hidden></ul>
+      <details class="trace" hidden>
+        <summary>How this was answered</summary>
+        <ol class="steps"></ol>
+        <div class="definitions" hidden>
+          <h3>Glossary definitions used</h3>
+          <ul></ul>
+        </div>
+        <p class="muted trace-meta"></p>
+      </details>
+      <button type="button" class="ghost retry" hidden>Try again</button>
+    </div>
+  </template>
 
   <script src="/app.js"></script>
 </body>

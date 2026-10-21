@@ -134,8 +134,19 @@ def get_embedder(settings: Settings) -> GeminiEmbedder:
 
 
 @lru_cache
+def bundled_glossaries() -> dict[str, Glossary]:
+    return load_glossaries()
+
+
+@lru_cache
 def get_glossary_index() -> GlossaryIndex:
-    return GlossaryIndex(load_glossaries(), get_embedder(get_settings()))
+    return GlossaryIndex(bundled_glossaries(), get_embedder(get_settings()))
+
+
+def search_glossary(question: str, columns: list[str]) -> list[Definition]:
+    if not any(glossary.applies_to(columns) for glossary in bundled_glossaries().values()):
+        return []
+    return get_glossary_index().search(question, columns)
 
 
 def _error_message(response: httpx.Response) -> str:

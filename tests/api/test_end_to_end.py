@@ -18,7 +18,7 @@ from app.analysis.tools import (
     get_top_n,
     list_columns,
 )
-from app.api.datasets import DATASETS
+from app.storage import get_store
 from app.main import app
 
 SALES = Path(__file__).parent.parent / "data" / "sales.csv"
@@ -30,7 +30,7 @@ def uploaded():
     response = client.post("/datasets", files={"file": ("sales.csv", SALES.read_bytes(), "text/csv")})
     assert response.status_code == 201
     body = response.json()
-    return body["profile"], DATASETS[body["dataset_id"]]
+    return body["profile"], get_store().get(body["dataset_id"])
 
 
 @pytest.fixture(scope="module")

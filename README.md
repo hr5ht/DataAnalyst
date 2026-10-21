@@ -37,8 +37,22 @@ vercel --prod
 Things to know on Vercel:
 
 - Uploads are capped at 4 MB because Vercel rejects request bodies over 4.5 MB. Elsewhere, raise it with `MAX_UPLOAD_MB`.
-- Uploaded datasets are kept in memory, so they are gone once Vercel recycles the instance. Upload the file again if that happens.
+- Uploaded datasets are kept in memory, so they are gone once Vercel recycles the instance. The page uploads the file again on its own when that happens.
 - The glossary index is rebuilt with one Gemini call after each cold start.
+
+## Asking questions
+
+After uploading, ask a question in the box under the summary, or call the API directly:
+
+```
+curl -X POST http://127.0.0.1:8000/datasets/<dataset_id>/questions \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Which country made the most revenue?"}'
+```
+
+The model only picks one of the built-in analyses and its arguments. pandas computes the result, and the written answer is checked so that every number in it appears in the result table; otherwise the plain step description is shown instead. Each response has a `status` (`answered`, `empty`, `clarify`, `unsupported` or `error`), the `answer`, the `operation` that ran, the `table`, an optional `chart`, any `warnings`, and the glossary `definitions` that were used. Provider failures return HTTP 503.
+
+Up to `MAX_DATASETS` uploads (default 10) are kept, each for `DATASET_TTL_MINUTES` (default 60) after it was last used.
 
 ## Glossary
 

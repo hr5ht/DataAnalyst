@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.datasets import DATASETS
+from app.storage import get_store
 from app.config import Settings, get_settings
 from app.main import app
 
@@ -30,7 +30,7 @@ def test_valid_csv_returns_dataset_id():
     assert body["profile"]["rows"] == 2
     assert [c["name"] for c in body["profile"]["column_profiles"]] == ["category", "sales"]
     assert body["filename"] == "data.csv"
-    assert DATASETS[body["dataset_id"]]["sales"].sum() == 13.5
+    assert get_store().get(body["dataset_id"])["sales"].sum() == 13.5
 
 
 def test_utf8_bom_is_stripped_from_header():
@@ -99,7 +99,7 @@ def test_rejects_too_many_columns(limits):
 def test_short_rows_become_missing_values():
     response = upload("a,b\n1,2\n3\n")
     assert response.status_code == 201
-    assert DATASETS[response.json()["dataset_id"]]["b"].isna().sum() == 1
+    assert get_store().get(response.json()["dataset_id"])["b"].isna().sum() == 1
 
 
 def test_rejects_very_long_column_names():

@@ -1,5 +1,4 @@
 import io
-import uuid
 from typing import Annotated
 
 import pandas as pd
@@ -9,10 +8,10 @@ from pydantic import BaseModel
 from app.analysis.profiler import DatasetProfile, profile_dataset
 from app.analysis.tools import normalize_dtypes
 from app.config import Settings, get_settings
+from app.storage import DatasetStore, get_store
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
-DATASETS: dict[str, pd.DataFrame] = {}
 MAX_COLUMN_NAME_LENGTH = 100
 
 
@@ -61,7 +60,11 @@ def load_csv(raw: bytes, settings: Settings) -> pd.DataFrame:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def upload_dataset(file: UploadFile, settings: Annotated[Settings, Depends(get_settings)]) -> DatasetCreated:
+def upload_dataset(
+    file: UploadFile,
+    settings: Annotated[Settings, Depends(get_settings)],
+    store: Annotated[DatasetStore, Depends(get_store)],
+) -> DatasetCreated:
     filename = file.filename or ""
     if not filename.lower().endswith(".csv"):
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only .csv files are supported.")
@@ -74,14 +77,17 @@ def upload_dataset(file: UploadFile, settings: Annotated[Settings, Depends(get_s
         )
 
     df = load_csv(raw, settings)
-    dataset_id = uuid.uuid4().hex
-    DATASETS[dataset_id] = df
+    dataset_id = store.add(df)
     return DatasetCreated(dataset_id=dataset_id, filename=filename, profile=profile_dataset(df))
 
 
 @router.get("/{dataset_id}")
-def get_dataset(dataset_id: str) -> DatasetResponse:
-    df = DATASETS.get(dataset_id)
+def get_dataset(dataset_id: str, store: Annotated[DatasetStore, Depends(get_store)]) -> DatasetResponse:
+    return DatasetResponse(dataset_id=dataset_id, profile=profile_dataset(find_dataset(dataset_id, store)))
+
+
+def find_dataset(dataset_id: str, store: DatasetStore) -> pd.DataFrame:
+    df = store.get(dataset_id)
     if df is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dataset not found.")
-    return DatasetResponse(dataset_id=dataset_id, profile=profile_dataset(df))
+    return df
