@@ -46,7 +46,7 @@ def ask(client, dataset_id):
 
 def test_data_routes_need_a_session(client):
     assert upload(client).status_code == 401
-    assert client.get("/datasets/abc").json() == {"detail": "Sign in to use the demo."}
+    assert client.get("/datasets/abc").json() == {"detail": "Sign in to continue."}
     assert client.post("/datasets/abc/questions", json={"question": "Total?"}).status_code == 401
 
 
@@ -95,7 +95,7 @@ def test_signed_in_demo_flow_counts_down_and_stops_at_the_cap(client):
     assert ask(client, dataset_id).status_code == 200
     blocked = ask(client, dataset_id)
     assert blocked.status_code == 429
-    assert "allows 2 questions a day" in blocked.json()["detail"]
+    assert "daily limit is 2 questions" in blocked.json()["detail"]
     assert client.get("/auth/session").json()["questions_left"] == 0
 
 

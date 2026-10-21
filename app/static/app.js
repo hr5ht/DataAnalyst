@@ -1,8 +1,10 @@
-const loginView = document.getElementById("login-view");
+const loginDialog = document.getElementById("login-dialog");
 const loginForm = document.getElementById("login-form");
 const loginStatus = document.getElementById("login-status");
 const usageEl = document.getElementById("usage");
 const signOutButton = document.getElementById("sign-out");
+const logInButton = document.getElementById("log-in");
+const signUpButton = document.getElementById("sign-up");
 const uploadView = document.getElementById("upload-view");
 const workspace = document.getElementById("workspace");
 const dropzone = document.getElementById("dropzone");
@@ -25,13 +27,22 @@ const settings = { maxUploadMb: 4, chatEnabled: true };
 let auth = { required: false, authenticated: true, questionsLeft: null };
 let current = null;
 let pendingClarify = null;
+let pendingFile = null;
 let busy = false;
 
 init();
 
+document.addEventListener("pointermove", (event) => {
+  const card = event.target.closest?.(".spotlight");
+  if (!card) return;
+  const box = card.getBoundingClientRect();
+  card.style.setProperty("--x", `${event.clientX - box.left}px`);
+  card.style.setProperty("--y", `${event.clientY - box.top}px`);
+});
+
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = loginForm.querySelector("button");
+  const button = loginForm.querySelector("button[type=submit]");
   button.disabled = true;
   setStatus(loginStatus, "Signing in...");
   try {
@@ -40,10 +51,12 @@ loginForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: loginForm.elements.username.value, password: loginForm.elements.password.value }),
     });
+    const file = pendingFile;
+    pendingFile = null;
     loginForm.reset();
-    setStatus(loginStatus, "");
+    loginDialog.close();
     applySession(info);
-    showView("upload");
+    if (file) startUpload(file);
   } catch (error) {
     setStatus(loginStatus, readableError(error), true);
   } finally {
@@ -56,8 +69,18 @@ signOutButton.addEventListener("click", async () => {
     applySession(await request("/auth/logout", { method: "POST" }));
   } finally {
     current = null;
-    showView("login");
+    showView("upload");
   }
+});
+
+logInButton.addEventListener("click", () => openLogin());
+document.getElementById("login-close").addEventListener("click", () => loginDialog.close());
+loginDialog.addEventListener("click", (event) => {
+  if (event.target === loginDialog) loginDialog.close();
+});
+loginDialog.addEventListener("close", () => {
+  loginForm.reset();
+  setStatus(loginStatus, "");
 });
 
 fileInput.addEventListener("change", () => {
@@ -122,15 +145,14 @@ async function init() {
   } catch {
     auth = { required: false, authenticated: true, questionsLeft: null };
   }
-  showView(auth.required && !auth.authenticated ? "login" : "upload");
+  showView("upload");
 }
 
 function showView(name) {
-  loginView.hidden = name !== "login";
   uploadView.hidden = name !== "upload";
   workspace.hidden = name !== "workspace";
   document.getElementById("dataset-chip").hidden = name !== "workspace";
-  if (name === "login") loginForm.elements.username.focus();
+  document.getElementById("new-file").hidden = name !== "workspace";
 }
 
 function applySession(info) {
@@ -138,6 +160,7 @@ function applySession(info) {
   const showUsage = info.auth_required && info.authenticated;
   usageEl.hidden = !showUsage;
   signOutButton.hidden = !showUsage;
+  logInButton.hidden = signUpButton.hidden = !(info.auth_required && !info.authenticated);
   if (showUsage) {
     const word = element("span", "usage-word", info.questions_left === 1 ? " question" : " questions");
     usageEl.replaceChildren(formatNumber(info.questions_left), word, " left today");
@@ -159,12 +182,14 @@ function canAsk() {
 }
 
 function signedOut(message) {
-  current = null;
-  auth = { ...auth, authenticated: false };
-  usageEl.hidden = true;
-  signOutButton.hidden = true;
-  showView("login");
-  setStatus(loginStatus, message, true);
+  applySession({ auth_required: true, authenticated: false });
+  openLogin(message);
+}
+
+function openLogin(message = "") {
+  if (!loginDialog.open) loginDialog.showModal();
+  setStatus(loginStatus, message, Boolean(message));
+  loginForm.elements.username.focus();
 }
 
 async function loadSettings() {
@@ -188,6 +213,12 @@ async function startUpload(file) {
     setStatus(uploadStatus, `${file.name} is larger than ${formatNumber(settings.maxUploadMb)} MB.`, true);
     return;
   }
+  if (auth.required && !auth.authenticated) {
+    pendingFile = file;
+    setStatus(uploadStatus, `Sign in to upload ${file.name}.`);
+    openLogin();
+    return;
+  }
 
   dropzone.classList.add("busy");
   setStatus(uploadStatus, `Uploading and profiling ${file.name}...`);
@@ -198,6 +229,7 @@ async function startUpload(file) {
     setStatus(uploadStatus, "");
     refreshSession();
   } catch (error) {
+    if (error.status === 401) pendingFile = file;
     setStatus(uploadStatus, readableError(error), true);
   } finally {
     dropzone.classList.remove("busy");
@@ -239,13 +271,27 @@ function renderStats(profile) {
   ];
   document.getElementById("stats").replaceChildren(
     ...stats.map(([label, value, note]) => {
-      const card = element("div", "stat");
-      card.append(element("span", "", label), element("strong", "", value));
+      const card = element("div", "stat spotlight");
+      const number = element("strong", "", value);
+      card.append(element("span", "", label), number);
+      countUp(number, Number(String(value).replace(/[^\d.]/g, "")));
       if (note) card.append(element("small", "", note));
       return card;
     }),
   );
   document.getElementById("type-summary").textContent = typeSummary(profile.column_profiles);
+}
+
+function countUp(target, end) {
+  if (!Number.isFinite(end) || end === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const start = performance.now();
+  const duration = 700;
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    target.textContent = formatNumber(Math.round(end * (1 - (1 - progress) ** 3)));
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function typeSummary(columns) {
@@ -556,31 +602,31 @@ function renderChart(container, chart) {
           mode: "lines+markers",
           x: chart.x,
           y: chart.y,
-          line: { color: "#7c83ff", width: 2.5 },
-          marker: { color: "#2dd4bf", size: 7, line: { color: "#0a0c11", width: 2 } },
+          line: { color: "#0070f3", width: 2.5 },
+          marker: { color: "#ffffff", size: 7, line: { color: "#0070f3", width: 2 } },
           fill: "tozeroy",
-          fillcolor: "rgba(124, 131, 255, 0.08)",
+          fillcolor: "rgba(0, 112, 243, 0.07)",
         }
-      : { type: "bar", x: chart.x, y: chart.y, marker: { color: "#7c83ff", line: { width: 0 } }, opacity: 0.9 };
+      : { type: "bar", x: chart.x, y: chart.y, marker: { color: "#171717", line: { width: 0 } } };
   window.Plotly.newPlot(
     container,
     [trace],
     {
-      title: { text: chart.title, font: { size: 13, color: "#e6e9f0" }, x: 0.01, xanchor: "left" },
+      title: { text: chart.title, font: { size: 13, color: "#171717" }, x: 0.01, xanchor: "left" },
       xaxis: {
         title: { text: chart.x_label },
         type: "category",
         automargin: true,
         gridcolor: "rgba(0,0,0,0)",
-        linecolor: "#2e3545",
-        tickcolor: "#2e3545",
+        linecolor: "#eaeaea",
+        tickcolor: "#eaeaea",
       },
-      yaxis: { title: { text: chart.y_label }, automargin: true, gridcolor: "#1c212c", zerolinecolor: "#2e3545" },
+      yaxis: { title: { text: chart.y_label }, automargin: true, gridcolor: "#f0f0f0", zerolinecolor: "#eaeaea" },
       margin: { t: 36, r: 20, b: 36, l: 44 },
       height: 260,
       bargap: 0.35,
-      hoverlabel: { bgcolor: "#1c212c", bordercolor: "#2e3545", font: { color: "#e6e9f0" } },
-      font: { family: "system-ui, sans-serif", size: 11, color: "#8b93a6" },
+      hoverlabel: { bgcolor: "#0a0a0a", bordercolor: "#0a0a0a", font: { color: "#ffffff", family: "Geist, system-ui, sans-serif" } },
+      font: { family: "Geist, system-ui, sans-serif", size: 11, color: "#666666" },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
     },
@@ -622,7 +668,7 @@ function setComposerEnabled(enabled) {
   questionInput.disabled = !enabled;
   sendButton.disabled = !enabled;
   questionInput.placeholder =
-    auth.questionsLeft === 0 ? "Today's demo limit is used up. It resets at midnight UTC." : "Ask a question about your data...";
+    auth.questionsLeft === 0 ? "Today's limit is used up. It resets at midnight UTC." : "Ask a question about your data...";
 }
 
 async function request(url, options) {

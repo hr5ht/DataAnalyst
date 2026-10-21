@@ -93,7 +93,7 @@ def valid_token(settings: Settings, token: str, now: float | None = None) -> boo
 
 def require_session(request: Request, settings: Annotated[Settings, Depends(get_settings)]) -> None:
     if auth_enabled(settings) and not valid_token(settings, request.cookies.get(COOKIE, "")):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in to use the demo.")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign in to continue.")
 
 
 def spend(kind: Kind, settings: Settings, usage: Usage) -> None:
@@ -103,7 +103,7 @@ def spend(kind: Kind, settings: Settings, usage: Usage) -> None:
     if not usage.take(kind, limit):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            f"The demo allows {limit} {kind} a day and today's are used up. It resets at midnight UTC.",
+            f"The daily limit is {limit} {kind} and today's are used up. It resets at midnight UTC.",
         )
 
 

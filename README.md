@@ -1,10 +1,78 @@
-# ai-data-analyst
+# AI Data Analyst
 
-Ask questions about a CSV in plain English. Calculations run in pandas; the LLM picks the analysis and explains the result.
+Upload a CSV, review its data quality, and ask questions about it in plain English. Every number is computed with pandas. The LLM only chooses the analysis and explains the result.
+
+**Live:** https://aidataanalyst-hr5ht.vercel.app
+
+## Demo login
+
+| Username | Password |
+| --- | --- |
+| `demouser` | `demouserpass2026` |
+
+You can browse the site without signing in. You'll be asked to sign in when you upload a file. The demo account allows 50 questions and 20 uploads a day, and the count resets at midnight UTC.
+
+## Features
+
+- **Profiling:** shows column types, ranges, missing values, duplicate rows and sample rows as soon as a file is uploaded.
+- **Questions in plain English:** answers come with the result table, a chart, and the exact steps that were run.
+- **Allowlisted analyses only:** the model can't run arbitrary code. It picks one of the built-in tools and fills in its arguments.
+- **Grounded answers:** every number in a written answer must appear in the result table. If one doesn't, the app shows the plain step description instead.
+- **Glossary lookup:** definitions for known datasets are retrieved with Gemini embeddings and FAISS, then passed to the planner.
+- **Self-repair:** an invalid plan is sent back to the model once, along with the reason it failed.
+
+## How it works
+
+```
+question → validate → retrieve definitions → plan (Groq) → run tool (pandas)
+         → check result → explain (Groq) → verify numbers → response
+```
+
+The workflow is a LangGraph state graph. These are the analyses the planner can choose from:
+
+| Tool | What it does |
+| --- | --- |
+| `profile_dataset` | Summary of the whole file |
+| `list_columns` | Column names and types |
+| `aggregate_data` | sum, mean, median, count, min or max, optionally grouped and filtered |
+| `get_top_n` | Top or bottom N rows by a metric |
+| `filter_data` | Rows matching conditions |
+| `compute_correlation` | Pearson or Spearman correlation between two columns |
+| `analyze_time_trend` | A metric over day, week, month, quarter or year |
+| `clarify` / `unsupported` | Ask for more detail or decline the question |
+
+## Tech stack
+
+| Layer | Tools |
+| --- | --- |
+| API | FastAPI, Pydantic |
+| Analysis | pandas |
+| Agent | LangGraph, LangChain Groq (`openai/gpt-oss-120b`) |
+| Retrieval | Gemini embeddings (`gemini-embedding-2`), FAISS |
+| Frontend | HTML, CSS, JavaScript, Plotly |
+| Hosting | Vercel (Python function) |
+
+## Project structure
+
+```
+app/
+  agent/        planner, intent schema, LangGraph workflow, explainer
+  analysis/     profiler, pandas tools, chart specs
+  api/          dataset and question routes
+  retrieval/    glossary embedding and search
+  static/       frontend
+  auth.py       demo login and daily caps
+  config.py     settings
+  main.py       app entry point
+knowledge_base/ glossary files for the sample datasets
+tests/          unit and API tests
+```
 
 ## Running locally
 
-```
+Requires Python 3.12.
+
+```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -14,56 +82,58 @@ uvicorn app.main:app --reload
 
 Then open http://127.0.0.1:8000.
 
-Asking questions needs a Groq API key. Get a free one at https://console.groq.com/keys and set `GROQ_API_KEY` in `.env`. Glossary search uses Gemini embeddings; get a key at https://aistudio.google.com/apikey and set `GEMINI_API_KEY`.
+## Configuration
 
-## Deploying to Vercel
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GROQ_API_KEY` | none | Needed for questions ([get a key](https://console.groq.com/keys)) |
+| `GEMINI_API_KEY` | none | Needed for glossary search ([get a key](https://aistudio.google.com/apikey)) |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Model used for planning and explaining |
+| `EMBEDDING_MODEL` | `gemini-embedding-2` | Model used for glossary embeddings |
+| `MAX_UPLOAD_MB` | `4` | Upload size limit |
+| `DEMO_USERNAME`, `DEMO_PASSWORD` | none | Turn on the login. Leave both empty to turn it off |
+| `DEMO_DAILY_QUESTIONS` | `50` | Questions allowed per day |
+| `DEMO_DAILY_UPLOADS` | `20` | Uploads allowed per day |
+| `APP_ENV` | `development` | Set to `production` when deployed |
 
-The app runs on the free Hobby plan as a single Python function.
+## API
 
-1. Import the repo at https://vercel.com/new. Vercel detects FastAPI from `requirements.txt` and `app/main.py`, so no extra config is needed.
-2. Under Settings → Environment Variables, add `GROQ_API_KEY`, `GEMINI_API_KEY`, `DEMO_USERNAME` and `DEMO_PASSWORD`, and set `APP_ENV` to `production`.
-3. Deploy.
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Status and configuration flags |
+| `GET` | `/auth/session` | Current session and remaining usage |
+| `POST` | `/auth/login` | Sign in |
+| `POST` | `/auth/logout` | Sign out |
+| `POST` | `/datasets` | Upload a CSV and get its profile |
+| `GET` | `/datasets/{id}` | Fetch a stored dataset's profile |
+| `POST` | `/datasets/{id}/questions` | Ask a question |
 
-From the terminal instead:
-
-```
-npm i -g vercel
-vercel link
-vercel env add GROQ_API_KEY production
-vercel env add GEMINI_API_KEY production
-vercel --prod
-```
-
-Things to know on Vercel:
-
-- Uploads are capped at 4 MB because Vercel rejects request bodies over 4.5 MB. Elsewhere, raise it with `MAX_UPLOAD_MB`.
-- Uploaded datasets are kept in memory, so they are gone once Vercel recycles the instance. The page uploads the file again on its own when that happens.
-- The glossary index is rebuilt with one Gemini call after each cold start.
-
-## Asking questions
-
-After uploading, ask a question in the box under the summary, or call the API directly:
-
-```
+```bash
 curl -X POST http://127.0.0.1:8000/datasets/<dataset_id>/questions \
   -H "Content-Type: application/json" \
   -d '{"question": "Which country made the most revenue?"}'
 ```
 
-The model only picks one of the built-in analyses and its arguments. pandas computes the result, and the written answer is checked so that every number in it appears in the result table; otherwise the plain step description is shown instead. Each response has a `status` (`answered`, `empty`, `clarify`, `unsupported` or `error`), the `answer`, the `operation` that ran, the `table`, an optional `chart`, any `warnings`, and the glossary `definitions` that were used. Provider failures return HTTP 503.
+Each response contains:
+- `status`: one of `answered`, `empty`, `clarify`, `unsupported` or `error`
+- `answer`, the `operation` that ran, the result `table` and an optional `chart`
+- `warnings` and the glossary `definitions` that were used
 
-Up to `MAX_DATASETS` uploads (default 10) are kept, each for `DATASET_TTL_MINUTES` (default 60) after it was last used.
+## Deploying to Vercel
 
-## Demo login
+1. Import the repo at https://vercel.com/new. Vercel detects FastAPI on its own.
+2. Add `GROQ_API_KEY`, `GEMINI_API_KEY`, `DEMO_USERNAME` and `DEMO_PASSWORD`, and set `APP_ENV=production`.
+3. Deploy.
 
-Set `DEMO_USERNAME` and `DEMO_PASSWORD` to put the app behind a single demo account. Visitors sign in on the first screen, and the session lasts 12 hours. Changing the password signs everyone out. Signed-in use is capped at `DEMO_DAILY_QUESTIONS` questions (default 50) and `DEMO_DAILY_UPLOADS` uploads (default 20) per day, reset at midnight UTC. Counts are kept in memory, so each running instance has its own count. Leave both variables empty to turn the login and caps off, which is the default for local development.
-
-## Glossary
-
-Column and metric definitions for the sample datasets live in `knowledge_base/*.json`. A glossary is used only when the uploaded CSV has all of its `columns`. Entries are embedded with Gemini (`gemini-embedding-2`) and searched with FAISS. The index is built in memory on first use, so editing a file and restarting the app rebuilds it.
+Limits on the free plan:
+- Uploads are capped at 4 MB because Vercel rejects request bodies over 4.5 MB.
+- Datasets live in memory. If an instance is recycled, the page uploads the file again on its own.
+- Each instance keeps its own usage count, and a cold start rebuilds the glossary index.
 
 ## Tests
 
-```
+```bash
 pytest
 ```
+
+The tests use scripted model responses and a fake embedder, so they make no API calls.
