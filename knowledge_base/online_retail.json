@@ -1,0 +1,76 @@
+{
+  "name": "UCI Online Retail",
+  "columns": ["InvoiceNo", "StockCode", "Quantity", "UnitPrice"],
+  "entries": [
+    {
+      "term": "InvoiceNo",
+      "kind": "column",
+      "text": "Invoice number. Every line of one order shares it. Invoice numbers starting with C are cancellations."
+    },
+    {
+      "term": "StockCode",
+      "kind": "column",
+      "text": "Product code. Some codes are not products: POST is postage, D is a discount, M is a manual adjustment, BANK CHARGES and AMAZONFEE are fees."
+    },
+    {
+      "term": "Description",
+      "kind": "column",
+      "text": "Product name. Missing on some lines."
+    },
+    {
+      "term": "Quantity",
+      "kind": "column",
+      "text": "Units of the product on the line. Negative for cancellations, returns and stock adjustments."
+    },
+    {
+      "term": "InvoiceDate",
+      "kind": "column",
+      "text": "Date and time the invoice was created, from 2010-12-01 to 2011-12-09. The timezone is not stated."
+    },
+    {
+      "term": "UnitPrice",
+      "kind": "column",
+      "text": "Price of one unit in pounds sterling (GBP). Some lines have a price of zero."
+    },
+    {
+      "term": "CustomerID",
+      "kind": "column",
+      "text": "Customer identifier. It is an ID, not an amount: group or count by it, never sum or average it. About a quarter of lines have no customer."
+    },
+    {
+      "term": "Country",
+      "kind": "column",
+      "text": "Country the customer lives in. Most lines are from the United Kingdom, so other countries rest on few lines."
+    },
+    {
+      "term": "Revenue",
+      "kind": "metric",
+      "text": "Sales value of a line in GBP, Quantity times UnitPrice. Sales, turnover, income and money made all mean the sum of Revenue."
+    },
+    {
+      "term": "Order lines",
+      "kind": "metric",
+      "text": "Each row is one product line on an invoice, not a whole order. Counting rows counts lines, not orders or customers."
+    },
+    {
+      "term": "Best-selling product",
+      "kind": "metric",
+      "text": "Can mean the most units sold (sum of Quantity by Description) or the most money (sum of Revenue by Description). Ask which one when the question does not say."
+    },
+    {
+      "term": "Customer questions",
+      "kind": "caveat",
+      "text": "Questions about customers only cover lines with a CustomerID. Lines without one are left out of any per-customer result."
+    },
+    {
+      "term": "Cancellations and returns",
+      "kind": "caveat",
+      "text": "Cancelled lines have a negative Quantity and negative Revenue, which lowers totals. Filter Quantity greater than 0 to look at sales only."
+    },
+    {
+      "term": "Wholesale customers",
+      "kind": "caveat",
+      "text": "Many customers are wholesalers, so a single order can be very large and averages per line are skewed."
+    }
+  ]
+}

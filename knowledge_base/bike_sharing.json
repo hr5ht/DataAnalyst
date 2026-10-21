@@ -1,0 +1,96 @@
+{
+  "name": "UCI Bike Sharing (daily)",
+  "columns": ["dteday", "season", "weathersit", "cnt"],
+  "entries": [
+    {
+      "term": "instant",
+      "kind": "column",
+      "text": "Row number. Not a measurement, so never sum or average it."
+    },
+    {
+      "term": "dteday",
+      "kind": "column",
+      "text": "Date of the day, from 2011-01-01 to 2012-12-31. One row per day."
+    },
+    {
+      "term": "season",
+      "kind": "column",
+      "text": "Season of the year as a code: 1 winter, 2 spring, 3 summer, 4 fall. Questions about summer or winter group by season instead of averaging it."
+    },
+    {
+      "term": "yr",
+      "kind": "column",
+      "text": "Year code: 0 is 2011 and 1 is 2012."
+    },
+    {
+      "term": "mnth",
+      "kind": "column",
+      "text": "Month number, 1 for January to 12 for December."
+    },
+    {
+      "term": "holiday",
+      "kind": "column",
+      "text": "1 if the day is a public holiday, otherwise 0."
+    },
+    {
+      "term": "weekday",
+      "kind": "column",
+      "text": "Day of the week, 0 for Sunday to 6 for Saturday."
+    },
+    {
+      "term": "workingday",
+      "kind": "column",
+      "text": "1 if the day is neither a weekend nor a holiday, otherwise 0."
+    },
+    {
+      "term": "weathersit",
+      "kind": "column",
+      "text": "Weather code: 1 clear or partly cloudy, 2 mist or cloudy, 3 light rain or light snow, 4 heavy rain, ice or snow."
+    },
+    {
+      "term": "temp",
+      "kind": "column",
+      "text": "Temperature in Celsius divided by 41, so 0.5 means about 20 degrees."
+    },
+    {
+      "term": "atemp",
+      "kind": "column",
+      "text": "Feels-like temperature in Celsius divided by 50."
+    },
+    {
+      "term": "hum",
+      "kind": "column",
+      "text": "Humidity divided by 100."
+    },
+    {
+      "term": "windspeed",
+      "kind": "column",
+      "text": "Wind speed divided by 67."
+    },
+    {
+      "term": "casual",
+      "kind": "column",
+      "text": "Rentals that day by casual users without a membership."
+    },
+    {
+      "term": "registered",
+      "kind": "column",
+      "text": "Rentals that day by registered members."
+    },
+    {
+      "term": "cnt",
+      "kind": "metric",
+      "text": "Total bike rentals that day, casual plus registered. Rentals, rides, trips, demand and usage all mean cnt."
+    },
+    {
+      "term": "Weather effect",
+      "kind": "metric",
+      "text": "Compare cnt across weathersit or season groups, or correlate cnt with temp, hum and windspeed."
+    },
+    {
+      "term": "Scaled weather values",
+      "kind": "caveat",
+      "text": "temp, atemp, hum and windspeed are scaled to 0-1, not physical units. Convert before quoting degrees or speeds."
+    }
+  ]
+}
