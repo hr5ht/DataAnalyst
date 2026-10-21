@@ -1,18 +1,19 @@
-import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
 import faiss
+import httpx
 import numpy as np
 from pydantic import BaseModel, Field, ValidationError
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 
 KNOWLEDGE_BASE = Path(__file__).resolve().parents[2] / "knowledge_base"
-MODEL_DIR = Path(tempfile.gettempdir()) / "ai-data-analyst-models"
-MIN_SCORE = 0.3
-MODEL_FILES = ["config.json", "model.safetensors", "tokenizer.json"]
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
+DIMENSIONS = 768
+BATCH_SIZE = 100
+MIN_SCORE = 0.65
 
 
 class GlossaryError(RuntimeError):
@@ -43,12 +44,41 @@ class Definition(BaseModel):
     score: float
 
 
+class GeminiEmbedder:
+    def __init__(self, api_key: str, model: str, timeout: float):
+        self.url = GEMINI_URL.format(model=model)
+        self.model = f"models/{model}"
+        self.headers = {"x-goog-api-key": api_key}
+        self.timeout = timeout
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        vectors = []
+        for start in range(0, len(texts), BATCH_SIZE):
+            vectors += self._embed_batch(texts[start : start + BATCH_SIZE])
+        return np.array(vectors, dtype="float32")
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        requests = [
+            {"model": self.model, "content": {"parts": [{"text": text}]}, "output_dimensionality": DIMENSIONS}
+            for text in texts
+        ]
+        try:
+            response = httpx.post(self.url, headers=self.headers, json={"requests": requests}, timeout=self.timeout)
+        except httpx.TimeoutException:
+            raise GlossaryError("Gemini took too long to embed the text. Try again.") from None
+        except httpx.HTTPError:
+            raise GlossaryError("Could not reach Gemini to embed the text. Try again in a moment.") from None
+        if response.status_code != 200:
+            raise GlossaryError(f"Gemini could not embed the text (HTTP {response.status_code}): {_error_message(response)}")
+        return [item["values"] for item in response.json()["embeddings"]]
+
+
 class GlossaryIndex:
     def __init__(self, glossaries: dict[str, Glossary], model: Any):
         self.glossaries = glossaries
         self.model = model
         self.items = [(source, entry) for source, glossary in glossaries.items() for entry in glossary.entries]
-        vectors = self._embed([f"{entry.term}: {entry.text}" for _, entry in self.items])
+        vectors = self._embed([f"title: {entry.term} | text: {entry.text}" for _, entry in self.items])
         self.index = faiss.IndexFlatIP(vectors.shape[1])
         self.index.add(vectors)
 
@@ -56,7 +86,8 @@ class GlossaryIndex:
         sources = {source for source, glossary in self.glossaries.items() if glossary.applies_to(columns)}
         if not sources:
             return []
-        scores, ids = self.index.search(self._embed([question]), len(self.items))
+        query = self._embed([f"task: question answering | query: {question}"])
+        scores, ids = self.index.search(query, len(self.items))
         found = []
         for score, i in zip(scores[0], ids[0]):
             source, entry = self.items[i]
@@ -74,6 +105,8 @@ class GlossaryIndex:
     def _embed(self, texts: list[str]) -> np.ndarray:
         try:
             vectors = np.ascontiguousarray(self.model.encode(texts), dtype="float32")
+        except GlossaryError:
+            raise
         except Exception as error:
             raise GlossaryError(f"Could not embed the text: {error}") from None
         faiss.normalize_L2(vectors)
@@ -92,16 +125,22 @@ def load_glossaries(directory: Path = KNOWLEDGE_BASE) -> dict[str, Glossary]:
     return glossaries
 
 
-def load_model(name: str) -> Any:
-    from huggingface_hub import snapshot_download
-    from model2vec import StaticModel
-
-    try:
-        return StaticModel.from_pretrained(snapshot_download(name, cache_dir=MODEL_DIR, allow_patterns=MODEL_FILES))
-    except Exception as error:
-        raise GlossaryError(f"Could not load the embedding model {name}: {error}") from None
+def get_embedder(settings: Settings) -> GeminiEmbedder:
+    if settings.gemini_api_key is None:
+        raise GlossaryError("GEMINI_API_KEY is not set, so the glossary can't be searched. Add it to .env and restart.")
+    return GeminiEmbedder(
+        settings.gemini_api_key.get_secret_value(), settings.embedding_model, settings.llm_timeout_seconds
+    )
 
 
 @lru_cache
 def get_glossary_index() -> GlossaryIndex:
-    return GlossaryIndex(load_glossaries(), load_model(get_settings().embedding_model))
+    return GlossaryIndex(load_glossaries(), get_embedder(get_settings()))
+
+
+def _error_message(response: httpx.Response) -> str:
+    try:
+        message = response.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        message = response.reason_phrase
+    return str(message)[:200]

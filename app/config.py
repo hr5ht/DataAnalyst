@@ -15,13 +15,14 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(20, gt=0, le=120)
     llm_max_retries: int = Field(1, ge=0, le=3)
 
-    embedding_model: str = "minishlab/potion-base-8M"
+    gemini_api_key: SecretStr | None = None
+    embedding_model: str = "gemini-embedding-2"
 
     max_upload_mb: float = Field(4, gt=0)
     max_rows: int = 200_000
     max_columns: int = 100
 
-    @field_validator("groq_api_key", mode="before")
+    @field_validator("groq_api_key", "gemini_api_key", mode="before")
     @classmethod
     def blank_key_is_missing(cls, value):
         if isinstance(value, str) and not value.strip():

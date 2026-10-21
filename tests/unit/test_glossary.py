@@ -1,12 +1,12 @@
 import json
 
-import huggingface_hub
+import httpx
 import numpy as np
 import pytest
 
 from app.config import Settings
 from app.retrieval import glossary
-from app.retrieval.glossary import GlossaryError, GlossaryIndex, load_glossaries, load_model
+from app.retrieval.glossary import GeminiEmbedder, GlossaryError, GlossaryIndex, get_embedder, load_glossaries
 
 RETAIL = ["InvoiceNo", "StockCode", "Description", "Quantity", "InvoiceDate", "UnitPrice", "CustomerID", "Country"]
 BIKE = ["dteday", "season", "yr", "mnth", "holiday", "weekday", "workingday", "weathersit", "temp", "cnt"]
@@ -55,7 +55,8 @@ def test_results_carry_source_metadata(word_index):
     assert 0 < top.score <= 1
 
 
-def test_results_are_ranked_capped_and_thresholded(word_index):
+def test_results_are_ranked_capped_and_thresholded(word_index, monkeypatch):
+    monkeypatch.setattr(glossary, "MIN_SCORE", 0.3)
     found = word_index.search("weather rentals season", BIKE, k=2)
     assert len(found) == 2
     assert found[0].score >= found[1].score
@@ -74,50 +75,89 @@ def test_empty_knowledge_base_is_an_error(tmp_path):
         load_glossaries(tmp_path)
 
 
-def test_model_that_cannot_load_is_reported(monkeypatch):
-    def offline(*args, **kwargs):
-        raise OSError("network is unreachable")
-
-    monkeypatch.setattr(huggingface_hub, "snapshot_download", offline)
-    with pytest.raises(GlossaryError, match="Could not load the embedding model some/model: network is unreachable"):
-        load_model("some/model")
-
-
 def test_embedding_failure_is_reported():
     with pytest.raises(GlossaryError, match="Could not embed the text: out of memory"):
         GlossaryIndex(load_glossaries(), BrokenModel())
 
 
-def test_default_model_is_the_small_static_one():
-    assert Settings(_env_file=None).embedding_model == "minishlab/potion-base-8M"
+class FakeGemini:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def __call__(self, url, headers, json, timeout):
+        self.calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
-@pytest.fixture(scope="module")
-def real_index():
-    try:
-        model = load_model(Settings(_env_file=None).embedding_model)
-    except GlossaryError as error:
-        pytest.skip(str(error))
-    return GlossaryIndex(load_glossaries(), model)
+def embeddings(count):
+    return httpx.Response(200, json={"embeddings": [{"values": [1.0, float(i)]} for i in range(count)]})
+
+
+@pytest.fixture
+def fake_gemini(monkeypatch):
+    def install(*responses):
+        fake = FakeGemini(*responses)
+        monkeypatch.setattr(glossary.httpx, "post", fake)
+        return fake
+
+    return install
+
+
+def test_embedder_sends_key_in_header_and_returns_vectors(fake_gemini):
+    fake = fake_gemini(embeddings(2))
+    vectors = GeminiEmbedder("gsk_secret", "gemini-embedding-2", 5).encode(["a", "b"])
+    assert vectors.shape == (2, 2)
+    call = fake.calls[0]
+    assert call["url"].endswith("/models/gemini-embedding-2:batchEmbedContents")
+    assert "gsk_secret" not in call["url"]
+    assert call["headers"] == {"x-goog-api-key": "gsk_secret"}
+    assert call["timeout"] == 5
+    assert call["json"]["requests"][1] == {
+        "model": "models/gemini-embedding-2",
+        "content": {"parts": [{"text": "b"}]},
+        "output_dimensionality": 768,
+    }
+
+
+def test_embedder_splits_large_inputs_into_batches(fake_gemini):
+    fake = fake_gemini(embeddings(100), embeddings(30))
+    assert GeminiEmbedder("key", "m", 5).encode([str(i) for i in range(130)]).shape == (130, 2)
+    assert [len(call["json"]["requests"]) for call in fake.calls] == [100, 30]
 
 
 @pytest.mark.parametrize(
-    ("question", "columns", "expected"),
+    ("response", "message"),
     [
-        ("What were total sales by country?", RETAIL, "Revenue"),
-        ("Which product is best?", RETAIL, "Best-selling product"),
-        ("How many orders were cancelled?", RETAIL, "Cancellations and returns"),
-        ("Who are our top customers?", RETAIL, "CustomerID"),
-        ("How much does the weather affect rentals?", BIKE, "weathersit"),
-        ("Are there more rides in summer?", BIKE, "season"),
-        ("What is the average temperature in degrees?", BIKE, "temp"),
-        ("Do people ride more on working days?", BIKE, "workingday"),
+        (
+            httpx.Response(400, json={"error": {"message": "API key not valid. Please pass a valid API key."}}),
+            r"Gemini could not embed the text \(HTTP 400\): API key not valid",
+        ),
+        (httpx.Response(429, text="slow down"), r"\(HTTP 429\): Too Many Requests"),
+        (httpx.ReadTimeout("timed out"), "took too long"),
+        (httpx.ConnectError("no route"), "Could not reach Gemini"),
     ],
 )
-def test_real_model_retrieves_the_relevant_entry(real_index, question, columns, expected):
-    assert expected in [item.term for item in real_index.search(question, columns)]
+def test_embedder_failures_are_reported(fake_gemini, response, message):
+    fake_gemini(response)
+    with pytest.raises(GlossaryError, match=message) as raised:
+        GeminiEmbedder("gsk_secret", "m", 5).encode(["a"])
+    assert "gsk_secret" not in str(raised.value)
 
 
-@pytest.mark.parametrize("question", ["What is the capital of France?", "Tell me a joke", "hello"])
-def test_real_model_ignores_unrelated_questions(real_index, question):
-    assert real_index.search(question, RETAIL + BIKE) == []
+def test_index_keeps_gemini_errors_as_they_are(fake_gemini):
+    fake_gemini(httpx.Response(403, json={"error": {"message": "Permission denied."}}))
+    with pytest.raises(GlossaryError, match=r"^Gemini could not embed the text \(HTTP 403\): Permission denied.$"):
+        GlossaryIndex(load_glossaries(), GeminiEmbedder("key", "m", 5))
+
+
+def test_missing_gemini_key_is_reported():
+    with pytest.raises(GlossaryError, match="GEMINI_API_KEY is not set"):
+        get_embedder(Settings(_env_file=None, gemini_api_key=" "))
+
+
+def test_default_embedding_model_is_gemini():
+    assert Settings(_env_file=None).embedding_model == "gemini-embedding-2"
