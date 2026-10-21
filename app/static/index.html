@@ -3,27 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0c11">
   <title>Data Analyst</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232563eb'/%3E%3Cpath d='M7 17V11M12 17V7M17 17v-4' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='4' y1='28' x2='28' y2='4' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%232dd4bf'/%3E%3Cstop offset='1' stop-color='%237c83ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='url%28%23g%29' stroke-width='3.5' stroke-linecap='round' stroke-dasharray='44 9 9 9' transform='rotate%28-70 16 16%29'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='url%28%23g%29'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@4.1.2/plotly-basic.min.js" integrity="sha384-CQVnjjRLr7qiE0NRUOMECQiOsJiFOrqPu+WrTttl7hUk5w+7FaiJA+y3SVfjpksc" crossorigin="anonymous" defer></script>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="mark-gradient" x1="4" y1="28" x2="28" y2="4" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#2dd4bf"/>
+        <stop offset="1" stop-color="#7c83ff"/>
+      </linearGradient>
+    </defs>
+  </svg>
   <header class="topbar">
     <div class="brand">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6"/><path d="M7 17V11M12 17V7M17 17v-4"/></svg>
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="none" stroke="url(#mark-gradient)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="44 9 9 9" transform="rotate(-70 16 16)"/><circle cx="16" cy="16" r="3.2" fill="url(#mark-gradient)"/></svg>
       <span>Data Analyst</span>
     </div>
+    <div class="topbar-right">
     <div class="dataset-chip" id="dataset-chip" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
       <span id="dataset-name"></span>
       <span class="muted" id="dataset-size"></span>
       <button type="button" class="ghost" id="new-file">New file</button>
     </div>
+    <span class="usage" id="usage" hidden></span>
+    <button type="button" class="ghost" id="sign-out" hidden>Sign out</button>
+    </div>
   </header>
 
   <main>
-    <section class="upload-view" id="upload-view">
+    <section class="login-view" id="login-view" hidden>
+      <form class="card login-card" id="login-form">
+        <svg class="login-mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="none" stroke="url(#mark-gradient)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="44 9 9 9" transform="rotate(-70 16 16)"/><circle cx="16" cy="16" r="3.2" fill="url(#mark-gradient)"/></svg>
+        <h1>Sign in to the demo</h1>
+        <p class="muted">This is a private demo with a daily limit. Use the username and password you were given.</p>
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" maxlength="200" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="200" required>
+        <button type="submit" class="primary">Sign in</button>
+        <p class="status" id="login-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="upload-view" id="upload-view" hidden>
       <h1>Ask questions about any CSV file</h1>
       <p class="lead">Upload a file to check its columns and data quality, then chat with the AI analyst. Every number is computed with pandas; the AI only picks the analysis and explains the result.</p>
 

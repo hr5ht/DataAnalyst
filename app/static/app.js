@@ -1,3 +1,8 @@
+const loginView = document.getElementById("login-view");
+const loginForm = document.getElementById("login-form");
+const loginStatus = document.getElementById("login-status");
+const usageEl = document.getElementById("usage");
+const signOutButton = document.getElementById("sign-out");
 const uploadView = document.getElementById("upload-view");
 const workspace = document.getElementById("workspace");
 const dropzone = document.getElementById("dropzone");
@@ -17,11 +22,43 @@ const BADGES = {
 };
 
 const settings = { maxUploadMb: 4, chatEnabled: true };
+let auth = { required: false, authenticated: true, questionsLeft: null };
 let current = null;
 let pendingClarify = null;
 let busy = false;
 
-loadSettings();
+init();
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = loginForm.querySelector("button");
+  button.disabled = true;
+  setStatus(loginStatus, "Signing in...");
+  try {
+    const info = await request("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: loginForm.elements.username.value, password: loginForm.elements.password.value }),
+    });
+    loginForm.reset();
+    setStatus(loginStatus, "");
+    applySession(info);
+    showView("upload");
+  } catch (error) {
+    setStatus(loginStatus, readableError(error), true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+signOutButton.addEventListener("click", async () => {
+  try {
+    applySession(await request("/auth/logout", { method: "POST" }));
+  } finally {
+    current = null;
+    showView("login");
+  }
+});
 
 fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) startUpload(fileInput.files[0]);
@@ -55,10 +92,8 @@ document.getElementById("sample-button").addEventListener("click", async () => {
 
 document.getElementById("new-file").addEventListener("click", () => {
   current = null;
-  workspace.hidden = true;
-  uploadView.hidden = false;
-  document.getElementById("dataset-chip").hidden = true;
   setStatus(uploadStatus, "");
+  showView("upload");
   fileInput.focus();
 });
 
@@ -79,6 +114,58 @@ questionInput.addEventListener("input", () => {
   questionInput.style.height = "auto";
   questionInput.style.height = `${questionInput.scrollHeight}px`;
 });
+
+async function init() {
+  await loadSettings();
+  try {
+    applySession(await request("/auth/session"));
+  } catch {
+    auth = { required: false, authenticated: true, questionsLeft: null };
+  }
+  showView(auth.required && !auth.authenticated ? "login" : "upload");
+}
+
+function showView(name) {
+  loginView.hidden = name !== "login";
+  uploadView.hidden = name !== "upload";
+  workspace.hidden = name !== "workspace";
+  document.getElementById("dataset-chip").hidden = name !== "workspace";
+  if (name === "login") loginForm.elements.username.focus();
+}
+
+function applySession(info) {
+  auth = { required: info.auth_required, authenticated: info.authenticated, questionsLeft: info.questions_left };
+  const showUsage = info.auth_required && info.authenticated;
+  usageEl.hidden = !showUsage;
+  signOutButton.hidden = !showUsage;
+  if (showUsage) {
+    const word = element("span", "usage-word", info.questions_left === 1 ? " question" : " questions");
+    usageEl.replaceChildren(formatNumber(info.questions_left), word, " left today");
+    usageEl.classList.toggle("out", info.questions_left === 0);
+  }
+  if (current) setComposerEnabled(!busy && canAsk());
+}
+
+async function refreshSession() {
+  try {
+    applySession(await request("/auth/session"));
+  } catch {
+    return;
+  }
+}
+
+function canAsk() {
+  return settings.chatEnabled && auth.questionsLeft !== 0;
+}
+
+function signedOut(message) {
+  current = null;
+  auth = { ...auth, authenticated: false };
+  usageEl.hidden = true;
+  signOutButton.hidden = true;
+  showView("login");
+  setStatus(loginStatus, message, true);
+}
 
 async function loadSettings() {
   try {
@@ -109,6 +196,7 @@ async function startUpload(file) {
     current = { file, filename: data.filename, datasetId: data.dataset_id, profile: data.profile };
     showWorkspace();
     setStatus(uploadStatus, "");
+    refreshSession();
   } catch (error) {
     setStatus(uploadStatus, readableError(error), true);
   } finally {
@@ -135,8 +223,7 @@ function showWorkspace() {
   renderSample(profile);
   resetChat(profile, filename);
 
-  uploadView.hidden = true;
-  workspace.hidden = false;
+  showView("workspace");
   window.scrollTo({ top: 0 });
   if (settings.chatEnabled) questionInput.focus();
 }
@@ -282,7 +369,7 @@ function resetChat(profile, filename) {
   }
   welcome.append(chips);
   messagesEl.append(welcome);
-  setComposerEnabled(true);
+  setComposerEnabled(canAsk());
 }
 
 function suggestions(columns) {
@@ -322,7 +409,8 @@ async function sendQuestion(text) {
     scrollToMessage(showError(error, shown));
   } finally {
     setBusy(false);
-    questionInput.focus();
+    if (auth.authenticated) await refreshSession();
+    if (!questionInput.disabled) questionInput.focus();
   }
 }
 
@@ -463,18 +551,36 @@ function renderChart(container, chart) {
   }
   const trace =
     chart.type === "line"
-      ? { type: "scatter", mode: "lines+markers", x: chart.x, y: chart.y, line: { color: "#2563eb", width: 2 } }
-      : { type: "bar", x: chart.x, y: chart.y, marker: { color: "#2563eb" } };
+      ? {
+          type: "scatter",
+          mode: "lines+markers",
+          x: chart.x,
+          y: chart.y,
+          line: { color: "#7c83ff", width: 2.5 },
+          marker: { color: "#2dd4bf", size: 7, line: { color: "#0a0c11", width: 2 } },
+          fill: "tozeroy",
+          fillcolor: "rgba(124, 131, 255, 0.08)",
+        }
+      : { type: "bar", x: chart.x, y: chart.y, marker: { color: "#7c83ff", line: { width: 0 } }, opacity: 0.9 };
   window.Plotly.newPlot(
     container,
     [trace],
     {
-      title: { text: chart.title, font: { size: 13 }, x: 0, xanchor: "left" },
-      xaxis: { title: { text: chart.x_label }, type: chart.type === "bar" ? "category" : "-", automargin: true },
-      yaxis: { title: { text: chart.y_label }, automargin: true, gridcolor: "#e1e4e8" },
-      margin: { t: 36, r: 8, b: 36, l: 44 },
+      title: { text: chart.title, font: { size: 13, color: "#e6e9f0" }, x: 0.01, xanchor: "left" },
+      xaxis: {
+        title: { text: chart.x_label },
+        type: "category",
+        automargin: true,
+        gridcolor: "rgba(0,0,0,0)",
+        linecolor: "#2e3545",
+        tickcolor: "#2e3545",
+      },
+      yaxis: { title: { text: chart.y_label }, automargin: true, gridcolor: "#1c212c", zerolinecolor: "#2e3545" },
+      margin: { t: 36, r: 20, b: 36, l: 44 },
       height: 260,
-      font: { family: "system-ui, sans-serif", size: 11, color: "#1f2933" },
+      bargap: 0.35,
+      hoverlabel: { bgcolor: "#1c212c", bordercolor: "#2e3545", font: { color: "#e6e9f0" } },
+      font: { family: "system-ui, sans-serif", size: 11, color: "#8b93a6" },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
     },
@@ -508,13 +614,15 @@ function scrollToMessage(card) {
 
 function setBusy(value) {
   busy = value;
-  setComposerEnabled(!value && settings.chatEnabled);
+  setComposerEnabled(!value && canAsk());
   for (const button of messagesEl.querySelectorAll(".chip, .retry")) button.disabled = value;
 }
 
 function setComposerEnabled(enabled) {
   questionInput.disabled = !enabled;
   sendButton.disabled = !enabled;
+  questionInput.placeholder =
+    auth.questionsLeft === 0 ? "Today's demo limit is used up. It resets at midnight UTC." : "Ask a question about your data...";
 }
 
 async function request(url, options) {
@@ -525,6 +633,9 @@ async function request(url, options) {
     throw new Error("Could not reach the server. Check your connection and try again.");
   }
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && !url.startsWith("/auth/")) {
+    signedOut("Your session has ended. Sign in again.");
+  }
   if (!response.ok) {
     const error = new Error(errorMessage(data, response.status));
     error.status = response.status;

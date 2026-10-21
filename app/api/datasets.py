@@ -7,10 +7,11 @@ from pydantic import BaseModel
 
 from app.analysis.profiler import DatasetProfile, profile_dataset
 from app.analysis.tools import normalize_dtypes
+from app.auth import Usage, get_usage, require_session, spend
 from app.config import Settings, get_settings
 from app.storage import DatasetStore, get_store
 
-router = APIRouter(prefix="/datasets", tags=["datasets"])
+router = APIRouter(prefix="/datasets", tags=["datasets"], dependencies=[Depends(require_session)])
 
 MAX_COLUMN_NAME_LENGTH = 100
 
@@ -64,6 +65,7 @@ def upload_dataset(
     file: UploadFile,
     settings: Annotated[Settings, Depends(get_settings)],
     store: Annotated[DatasetStore, Depends(get_store)],
+    usage: Annotated[Usage, Depends(get_usage)],
 ) -> DatasetCreated:
     filename = file.filename or ""
     if not filename.lower().endswith(".csv"):
@@ -77,6 +79,7 @@ def upload_dataset(
         )
 
     df = load_csv(raw, settings)
+    spend("uploads", settings, usage)
     dataset_id = store.add(df)
     return DatasetCreated(dataset_id=dataset_id, filename=filename, profile=profile_dataset(df))
 

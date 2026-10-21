@@ -13,12 +13,13 @@ from app.analysis.charts import ChartSpec, chart_for
 from app.analysis.profiler import DatasetProfile
 from app.analysis.tools import TableResult
 from app.api.datasets import find_dataset
+from app.auth import Usage, get_usage, require_session, spend
 from app.config import Settings, get_settings
 from app.llm import LLMError, get_chat_model
 from app.retrieval.glossary import Definition, search_glossary
 from app.storage import DatasetStore, get_store
 
-router = APIRouter(prefix="/datasets", tags=["questions"])
+router = APIRouter(prefix="/datasets", tags=["questions"], dependencies=[Depends(require_session)])
 
 MAX_TABLE_ROWS = 200
 MAX_CELL_LENGTH = 200
@@ -78,8 +79,11 @@ def ask_question(
     store: Annotated[DatasetStore, Depends(get_store)],
     model: Annotated[BaseChatModel, Depends(get_model)],
     search: Annotated[Callable[[str, list[str]], list[Definition]] | None, Depends(get_glossary_search)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    usage: Annotated[Usage, Depends(get_usage)],
 ) -> QuestionResponse:
     df = find_dataset(dataset_id, store)
+    spend("questions", settings, usage)
     state = run_analysis(body.question, df, model, search)
     if state.get("provider_error"):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, state["message"])

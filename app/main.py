@@ -6,10 +6,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import auth
 from app.api import datasets, questions
 from app.config import Settings, get_settings
 
 app = FastAPI(title="AI Data Analyst")
+app.include_router(auth.router)
 app.include_router(datasets.router)
 app.include_router(questions.router)
 

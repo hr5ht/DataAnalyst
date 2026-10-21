@@ -21,7 +21,7 @@ Asking questions needs a Groq API key. Get a free one at https://console.groq.co
 The app runs on the free Hobby plan as a single Python function.
 
 1. Import the repo at https://vercel.com/new. Vercel detects FastAPI from `requirements.txt` and `app/main.py`, so no extra config is needed.
-2. Under Settings → Environment Variables, add `GROQ_API_KEY` and `GEMINI_API_KEY`, and set `APP_ENV` to `production`.
+2. Under Settings → Environment Variables, add `GROQ_API_KEY`, `GEMINI_API_KEY`, `DEMO_USERNAME` and `DEMO_PASSWORD`, and set `APP_ENV` to `production`.
 3. Deploy.
 
 From the terminal instead:
@@ -53,6 +53,10 @@ curl -X POST http://127.0.0.1:8000/datasets/<dataset_id>/questions \
 The model only picks one of the built-in analyses and its arguments. pandas computes the result, and the written answer is checked so that every number in it appears in the result table; otherwise the plain step description is shown instead. Each response has a `status` (`answered`, `empty`, `clarify`, `unsupported` or `error`), the `answer`, the `operation` that ran, the `table`, an optional `chart`, any `warnings`, and the glossary `definitions` that were used. Provider failures return HTTP 503.
 
 Up to `MAX_DATASETS` uploads (default 10) are kept, each for `DATASET_TTL_MINUTES` (default 60) after it was last used.
+
+## Demo login
+
+Set `DEMO_USERNAME` and `DEMO_PASSWORD` to put the app behind a single demo account. Visitors sign in on the first screen, and the session lasts 12 hours. Changing the password signs everyone out. Signed-in use is capped at `DEMO_DAILY_QUESTIONS` questions (default 50) and `DEMO_DAILY_UPLOADS` uploads (default 20) per day, reset at midnight UTC. Counts are kept in memory, so each running instance has its own count. Leave both variables empty to turn the login and caps off, which is the default for local development.
 
 ## Glossary
 

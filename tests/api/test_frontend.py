@@ -45,3 +45,9 @@ def test_sample_file_is_served_and_uploads():
 
 def test_health_reports_the_upload_limit():
     assert client.get("/health").json()["max_upload_mb"] == 4
+
+
+def test_page_has_a_login_form():
+    page = client.get("/").text
+    assert 'id="login-form"' in page
+    assert 'type="password"' in page

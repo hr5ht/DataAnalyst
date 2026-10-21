@@ -24,7 +24,12 @@ class Settings(BaseSettings):
     max_datasets: int = Field(10, ge=1)
     dataset_ttl_minutes: float = Field(60, gt=0)
 
-    @field_validator("groq_api_key", "gemini_api_key", mode="before")
+    demo_username: str | None = None
+    demo_password: SecretStr | None = None
+    demo_daily_questions: int = Field(50, ge=1)
+    demo_daily_uploads: int = Field(20, ge=1)
+
+    @field_validator("groq_api_key", "gemini_api_key", "demo_username", "demo_password", mode="before")
     @classmethod
     def blank_key_is_missing(cls, value):
         if isinstance(value, str) and not value.strip():
