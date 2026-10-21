@@ -2,7 +2,7 @@
 
 Upload a CSV, review its data quality, and ask questions about it in plain English. Every number is computed with pandas. The LLM only chooses the analysis and explains the result.
 
-**Live:** https://aidataanalyst-hr5ht.vercel.app
+**Live:** https://dataanalyst-hr5ht.vercel.app
 
 ## Demo login
 
