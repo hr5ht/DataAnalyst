@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(20, gt=0, le=120)
     llm_max_retries: int = Field(1, ge=0, le=3)
 
+    embedding_model: str = "minishlab/potion-base-8M"
+
     max_upload_mb: float = 10
     max_rows: int = 200_000
     max_columns: int = 100
